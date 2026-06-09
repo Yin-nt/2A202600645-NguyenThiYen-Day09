@@ -10,7 +10,7 @@ Uses LangGraph's create_react_agent for the Think -> Act -> Observe loop.
 import asyncio
 import os
 import sys
-
+from langchain_core.tracers.stdout import ConsoleCallbackHandler
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from dotenv import load_dotenv
@@ -171,14 +171,34 @@ def check_compliance_requirements(industry: str, company_size: str) -> str:
         f"  {size_note}"
     )
 
+@tool
+def search_case_law(keywords: str) -> str:
+    """Tìm kiếm án lệ theo từ khóa.
+    
+    Args:
+        keywords: Từ khóa tìm kiếm
+    """
+    cases = {
+        "breach": "Hadley v. Baxendale (1854) - Consequential damages",
+        "negligence": "Donoghue v. Stevenson (1932) - Duty of care",
+        "contract": "Carlill v. Carbolic Smoke Ball Co (1893) - Unilateral contract",
+    }
+    for key, case in cases.items():
+        if key in keywords.lower():
+            return case
+    return "Không tìm thấy án lệ phù hợp"
 
-TOOLS = [search_legal_database, calculate_penalty, check_compliance_requirements]
 
+TOOLS = [search_legal_database, calculate_penalty, check_compliance_requirements, search_case_law]
+
+# QUESTION = (
+#     "A tech startup with $5M revenue was caught sharing user data without consent "
+#     "and failed to pay taxes on overseas revenue. What are all the legal consequences?"
+# )
 QUESTION = (
-    "A tech startup with $5M revenue was caught sharing user data without consent "
-    "and failed to pay taxes on overseas revenue. What are all the legal consequences?"
-)
-
+    '''Context: > AlphaTech (a software outsourcing company) signed a software development agreement with BetaRetail to build an e-commerce system. The contract value was $200,000, and the contract included a standard Non-Disclosure Agreement (NDA) clause to protect BetaRetail's customer database.
+The Breach: > Near the deployment deadline, a senior developer at AlphaTech willfully leaked BetaRetail's entire source code and customer database to a competitor. Consequently, BetaRetail terminated the contract immediately due to this material breach and had to spend an extra $50,000 to hire another vendor to complete the unfinished system.
+Question:As a legal analyst, use your available tools to analyze this situation. What are the potential legal consequences, liabilities, and estimated financial exposure (including damages and potential statutory fines) that AlphaTech might face under the UCC and DTSA? Trả lời bằng tiếng việt''')
 SYSTEM_PROMPT = (
     "You are a legal analyst agent. You have access to tools for searching legal databases, "
     "calculating penalties, and checking compliance requirements. Use these tools to build "
@@ -210,7 +230,7 @@ async def main():
     inputs = {"messages": [{"role": "user", "content": QUESTION}]}
 
     step = 0
-    async for chunk in graph.astream(inputs, stream_mode="updates"):
+    async for chunk in graph.astream(inputs, stream_mode="updates", config={"callbacks": [ConsoleCallbackHandler()]}):
         for node_name, update in chunk.items():
             step += 1
             messages = update.get("messages", [])
